@@ -8,25 +8,27 @@ import { errorHandler } from './middlewares/errorHandler';
 const app = express();
 
 // CORS configuration to allow Next.js frontend
-app.use(cors({
-  origin: [
-    
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://127.0.0.1:3000'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ]
-}));
+app.use(
+  cors({
+    origin: [
+      'https://storywonder.vercel.app/',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://127.0.0.1:3000',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+  }),
+);
 
 // Middleware
 app.use(express.json());
