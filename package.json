@@ -1,0 +1,42 @@
+{
+  "name": "storybook-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "nodemon --watch './**/*.ts' --exec 'ts-node' server.ts",
+    "clean": "rm -rf dist",
+    "build:clean": "npm run clean && npm run build",
+    "lint": "eslint './**/*.ts'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^24.1.0",
+    "dotenv": "^17.2.1",
+    "eslint": "^9.32.0",
+    "install": "^0.13.0",
+    "jest": "^30.0.5",
+    "nodemon": "^3.1.10",
+    "npm": "^11.5.1",
+    "prettier": "^3.6.2",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@clerk/backend": "^1.15.6",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^5.10.2",
+    "puppeteer": "^23.9.0"
+  }
+}
