@@ -11,7 +11,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      'https://storywonder.vercel.app/',
+      'https://storywonder.vercel.app',
       'http://localhost:3000',
       'http://localhost:3001',
       'https://localhost:3000',
