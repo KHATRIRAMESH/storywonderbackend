@@ -6,11 +6,7 @@ import { userService } from '../services/userService';
 export class StoryController {
   async getStories(req: Request, res: Response) {
     try {
-      const userId = getClerkUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: 'Unauthorized' });
-      }
-
+      const userId = (req as any).userId;
       console.log(`📚 Fetching stories for user: ${userId}`);
       const stories = await storyService.getUserStories(userId);
       console.log(`📚 Found ${stories.length} stories for user ${userId}`);
@@ -35,11 +31,7 @@ export class StoryController {
 
   async getStoryById(req: Request, res: Response) {
     try {
-      const userId = getClerkUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: 'Unauthorized' });
-      }
-
+      const userId = (req as any).userId;
       const storyId = parseInt(req.params.id);
       if (isNaN(storyId)) {
         return res.status(400).json({ message: 'Invalid story ID' });
@@ -65,14 +57,10 @@ export class StoryController {
 
   async createStory(req: Request, res: Response) {
     try {
-      const userId = getClerkUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: 'Unauthorized' });
-      }
+      const userId = (req as any).userId;
 
       const file = (req as any).file;
       const storyData = {
-        userId,
         childName: req.body.childName,
         childAge: parseInt(req.body.childAge),
         childGender: req.body.childGender,
@@ -85,22 +73,21 @@ export class StoryController {
       };
 
       console.log(`📝 Creating story for ${storyData.childName}...`);
-      const story = await storyService.createStory(storyData);
+      const story = await storyService.createStory(userId, storyData);
 
       res.status(201).json(story);
     } catch (error) {
       console.error('Error creating story:', error);
+      if ((error as Error).message.includes('limit reached')) {
+        return res.status(429).json({ message: 'Story generation limit reached for current subscription' });
+      }
       res.status(500).json({ message: 'Failed to create story' });
     }
   }
 
   async downloadStory(req: Request, res: Response) {
     try {
-      const userId = getClerkUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: 'Unauthorized' });
-      }
-
+      const userId = (req as any).userId;
       const storyId = parseInt(req.params.id);
       const story = await storyService.getStoryById(storyId);
 

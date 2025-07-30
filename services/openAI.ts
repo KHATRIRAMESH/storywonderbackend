@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Story } from './userService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -137,71 +136,131 @@ export class OpenAIService {
 
 export const openaiService = new OpenAIService();
 
-// In-memory storage for development (replace with database in production)
-const stories: Story[] = [];
-let storyIdCounter = 1;
+import pool from '../config/database';
+import { Story, StoryPage, CreateStoryRequest, StoryWithPages } from '../models/schemas';
+import { userService } from './userService';
+import { eq, desc, asc, and } from 'drizzle-orm';
+import { db } from '../db/config';
+import { stories, storyPages, type NewStory, type NewStoryPage } from '../db/schema';
 
 export class StoryService {
-  async createStory(storyData: {
-    userId: string;
-    childName: string;
-    childAge: number;
-    childGender: string;
-    interests: string;
-    theme: string;
-    style: string;
-    companions: string;
-    pageCount: number;
-    childImageUrl?: string;
-  }): Promise<Story> {
-    const story: Story = {
-      id: storyIdCounter++,
-      title: `${storyData.childName}'s Adventure`,
-      status: 'generating',
-      userId: storyData.userId,
-      childName: storyData.childName,
-      childAge: storyData.childAge,
-      childGender: storyData.childGender,
-      interests: storyData.interests,
-      theme: storyData.theme,
-      style: storyData.style,
-      companions: storyData.companions,
-      pageCount: storyData.pageCount,
-      childImageUrl: storyData.childImageUrl,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+  async createStory(userId: string, storyData: CreateStoryRequest): Promise<any> {
+    try {
+      // Check if user has reached story limit
+      const hasReachedLimit = await userService.hasReachedStoryLimit(userId);
+      if (hasReachedLimit) {
+        throw new Error('Story generation limit reached for current subscription');
+      }
 
-    stories.push(story);
+      // Create story in database
+      const newStory: NewStory = {
+        userId,
+        title: `${storyData.childName}'s Adventure`,
+        childName: storyData.childName,
+        childAge: storyData.childAge,
+        childGender: storyData.childGender,
+        interests: storyData.interests ? [storyData.interests] : [],
+        theme: storyData.theme,
+        style: storyData.style,
+        companions: storyData.companions ? [storyData.companions] : [],
+        pageCount: storyData.pageCount,
+        childImageUrl: storyData.childImageUrl || null,
+        status: 'generating'
+      };
 
-    // Generate story content asynchronously
-    this.generateStoryContent(story).catch(error => {
-      console.error(`Failed to generate story ${story.id}:`, error);
-      story.status = 'failed';
-      story.updatedAt = new Date();
-    });
+      const insertedStories = await db.insert(stories).values(newStory).returning();
+      const story = insertedStories[0];
 
-    return story;
+      // Generate story content asynchronously
+      this.generateStoryContent(story).catch(error => {
+        console.error(`Failed to generate story ${story.id}:`, error);
+        this.updateStoryStatus(story.id, 'failed');
+      });
+
+      // Increment user's story count
+      await userService.incrementStoryCount(userId);
+
+      return story;
+    } catch (error) {
+      console.error('Error creating story:', error);
+      throw error;
+    }
   }
 
-  async getUserStories(userId: string): Promise<Story[]> {
-    return stories.filter(story => story.userId === userId);
+  async getUserStories(userId: string): Promise<any[]> {
+    try {
+      const userStories = await db
+        .select()
+        .from(stories)
+        .where(eq(stories.userId, userId))
+        .orderBy(desc(stories.createdAt));
+
+      return userStories;
+    } catch (error) {
+      console.error('Error fetching user stories:', error);
+      return [];
+    }
   }
 
-  async getStoryById(storyId: number): Promise<Story | null> {
-    return stories.find(story => story.id === storyId) || null;
+  async getStoryById(storyId: number): Promise<any | null> {
+    try {
+      // Get story
+      const story = await db
+        .select()
+        .from(stories)
+        .where(eq(stories.id, storyId))
+        .limit(1);
+
+      if (story.length === 0) {
+        return null;
+      }
+
+      // Get story pages
+      const pages = await db
+        .select()
+        .from(storyPages)
+        .where(eq(storyPages.storyId, storyId))
+        .orderBy(asc(storyPages.pageNumber));
+
+      return {
+        ...story[0],
+        pages
+      };
+    } catch (error) {
+      console.error('Error fetching story:', error);
+      return null;
+    }
   }
 
   async deleteStory(storyId: number, userId: string): Promise<boolean> {
-    const index = stories.findIndex(story => story.id === storyId && story.userId === userId);
-    if (index !== -1) {
-      stories.splice(index, 1);
-      return true;
+    try {
+      const result = await db
+        .delete(stories)
+        .where(and(eq(stories.id, storyId), eq(stories.userId, userId)))
+        .returning({ id: stories.id });
+
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error deleting story:', error);
+      return false;
     }
-    return false;
   }
 
-  private async generateStoryContent(story: Story): Promise<void> {
+  async updateStoryStatus(storyId: number, status: 'generating' | 'completed' | 'failed'): Promise<void> {
+    try {
+      await db
+        .update(stories)
+        .set({ 
+          status: status as any,
+          updatedAt: new Date()
+        })
+        .where(eq(stories.id, storyId));
+    } catch (error) {
+      console.error('Error updating story status:', error);
+    }
+  }
+
+  private async generateStoryContent(story: any): Promise<void> {
     try {
       console.log(`🚀 Starting story generation for: ${story.title}`);
       
@@ -214,39 +273,65 @@ export class StoryService {
       );
 
       // Update story with generated content
-      story.title = storyContent.title || story.title;
-      story.pages = storyContent.pages || [];
+      await db
+        .update(stories)
+        .set({ 
+          title: storyContent.title || story.title,
+          updatedAt: new Date()
+        })
+        .where(eq(stories.id, story.id));
 
       // Generate cover image
       const coverPrompt = storyContent.coverImagePrompt || 
         `Children's book cover featuring ${story.childName}, a ${story.childAge}-year-old who loves ${story.interests}`;
       
-      story.coverImageUrl = await openaiService.generateImage(coverPrompt);
+      const coverImageUrl = await openaiService.generateImage(coverPrompt);
+      
+      await db
+        .update(stories)
+        .set({ thumbnailUrl: coverImageUrl })
+        .where(eq(stories.id, story.id));
 
-      // Generate images for each page
-      if (story.pages) {
-        for (let i = 0; i < story.pages.length; i++) {
-          const page = story.pages[i];
+      // Save story pages and generate images
+      if (storyContent.pages) {
+        for (let i = 0; i < storyContent.pages.length; i++) {
+          const page = storyContent.pages[i];
+          
+          // Insert page
+          const newPage: NewStoryPage = {
+            storyId: story.id,
+            pageNumber: i + 1,
+            content: page.text,
+            imagePrompt: page.imagePrompt
+          };
+
+          const insertedPages = await db.insert(storyPages).values(newPage).returning();
+          const pageId = insertedPages[0].id;
+
+          // Generate image for page
           if (page.imagePrompt) {
-            console.log(`🎨 Generating image for page ${i + 1}/${story.pages.length}`);
-            page.imageUrl = await openaiService.generateImage(page.imagePrompt);
+            console.log(`🎨 Generating image for page ${i + 1}/${storyContent.pages.length}`);
+            const imageUrl = await openaiService.generateImage(page.imagePrompt);
+            
+            await db
+              .update(storyPages)
+              .set({ imageUrl })
+              .where(eq(storyPages.id, pageId));
           }
         }
       }
 
-      story.status = 'completed';
-      story.updatedAt = new Date();
+      await this.updateStoryStatus(story.id, 'completed');
       
       console.log(`✅ Story generation completed for: ${story.title}`);
     } catch (error) {
       console.error('Error generating story content:', error);
-      story.status = 'failed';
-      story.updatedAt = new Date();
+      await this.updateStoryStatus(story.id, 'failed');
       throw error;
     }
   }
 
-  async downloadPDF(story: Story, res: any): Promise<void> {
+  async downloadPDF(story: any, res: any): Promise<void> {
     try {
       if (!story.pdfUrl) {
         // Generate PDF if it doesn't exist
@@ -269,21 +354,32 @@ export class StoryService {
     }
   }
 
-  private async generatePDF(story: Story): Promise<void> {
-    // This is a placeholder for PDF generation
-    // In a real implementation, you'd use a library like puppeteer, jsPDF, or PDFKit
-    console.log(`📄 PDF generation for story ${story.id} would be implemented here`);
-    
-    // For now, just set a mock PDF URL
-    const pdfDir = path.join(process.cwd(), 'generated-pdfs');
-    if (!fs.existsSync(pdfDir)) {
-      fs.mkdirSync(pdfDir, { recursive: true });
+  private async generatePDF(story: any): Promise<void> {
+    try {
+      console.log(`📄 PDF generation for story ${story.id} would be implemented here`);
+      
+      // For now, just set a mock PDF URL
+      const pdfDir = path.join(process.cwd(), 'generated-pdfs');
+      if (!fs.existsSync(pdfDir)) {
+        fs.mkdirSync(pdfDir, { recursive: true });
+      }
+      
+      const pdfPath = path.join(pdfDir, `story_${story.id}.pdf`);
+      
+      // Create a simple placeholder PDF file
+      fs.writeFileSync(pdfPath, 'PDF placeholder content');
+      
+      // Update story with PDF URL
+      await db
+        .update(stories)
+        .set({ pdfUrl: pdfPath })
+        .where(eq(stories.id, story.id));
+      
+      story.pdfUrl = pdfPath;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      throw error;
     }
-    
-    story.pdfUrl = path.join(pdfDir, `story_${story.id}.pdf`);
-    
-    // Create a simple placeholder PDF file
-    fs.writeFileSync(story.pdfUrl, 'PDF placeholder content');
   }
 }
 

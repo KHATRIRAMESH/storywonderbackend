@@ -1,14 +1,32 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
-import itemRoutes from './routes/itemRoutes.route';
+import authRoutes from './routes/authRoutes.route';
 import storyRoutes from './routes/storyRoutes.route';
 import { errorHandler } from './middlewares/errorHandler';
 
 const app = express();
 
+// CORS configuration to allow Next.js frontend
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://127.0.0.1:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ]
+}));
+
 // Middleware
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -16,11 +34,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // Routes
-app.use('/api/items', itemRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/stories', storyRoutes);
 
+//home route
+app.get('/', (req: Request, res: Response) => {
+  res.send('Welcome to the Storybook Server API!');
+});
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 

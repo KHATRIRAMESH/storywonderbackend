@@ -8,6 +8,14 @@
     "dev": "nodemon --watch './**/*.ts' --exec 'ts-node' server.ts",
     "clean": "rm -rf dist",
     "build:clean": "npm run clean && npm run build",
+    "migrate": "ts-node scripts/migrate.ts",
+    "db:up": "npm run migrate up",
+    "db:down": "npm run migrate down",
+    "db:reset": "npm run migrate reset",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "lint": "eslint './**/*.ts'"
   },
   "keywords": [],
@@ -20,6 +28,7 @@
     "@types/jest": "^30.0.0",
     "@types/multer": "^1.4.12",
     "@types/node": "^24.1.0",
+    "@types/pg": "^8.11.10",
     "dotenv": "^17.2.1",
     "eslint": "^9.32.0",
     "install": "^0.13.0",
@@ -34,9 +43,12 @@
   "dependencies": {
     "@clerk/backend": "^1.15.6",
     "cors": "^2.8.5",
+    "drizzle-kit": "^0.31.4",
+    "drizzle-orm": "^0.44.4",
     "express": "^5.1.0",
     "multer": "^1.4.5-lts.1",
     "openai": "^5.10.2",
+    "pg": "^8.12.0",
     "puppeteer": "^23.9.0"
   }
 }
