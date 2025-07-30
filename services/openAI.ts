@@ -161,11 +161,12 @@ export class StoryService {
         childGender: storyData.childGender,
         interests: storyData.interests ? [storyData.interests] : [],
         theme: storyData.theme,
-        style: storyData.style,
+        setting: null, // Add explicit setting field
         companions: storyData.companions ? [storyData.companions] : [],
         pageCount: storyData.pageCount,
         childImageUrl: storyData.childImageUrl || null,
         status: 'generating'
+        // Remove metadata for now to avoid schema issues
       };
 
       const insertedStories = await db.insert(stories).values(newStory).returning();
@@ -229,6 +230,21 @@ export class StoryService {
     } catch (error) {
       console.error('Error fetching story:', error);
       return null;
+    }
+  }
+
+  async getStoryPages(storyId: number): Promise<any[]> {
+    try {
+      const pages = await db
+        .select()
+        .from(storyPages)
+        .where(eq(storyPages.storyId, storyId))
+        .orderBy(asc(storyPages.pageNumber));
+
+      return pages;
+    } catch (error) {
+      console.error('Error fetching story pages:', error);
+      return [];
     }
   }
 

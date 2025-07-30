@@ -20,7 +20,6 @@ curl -s -X POST \
     "childGender": "female",
     "interests": "unicorns and painting",
     "theme": "magical forest",
-    "style": "whimsical",
     "companions": "a talking rabbit",
     "pageCount": 5
   }' \

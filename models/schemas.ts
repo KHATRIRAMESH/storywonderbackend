@@ -51,7 +51,6 @@ export interface CreateStoryRequest {
   childGender: string;
   interests: string;
   theme: string;
-  style: string;
   companions: string;
   pageCount: number;
   childImageUrl?: string;

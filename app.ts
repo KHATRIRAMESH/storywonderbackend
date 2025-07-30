@@ -1,8 +1,8 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
-import authRoutes from './routes/authRoutes.route';
-import storyRoutes from './routes/storyRoutes.route';
+import authRoutes from './routes/auth.route';
+import storyRoutes from './routes/story.route';
 import { errorHandler } from './middlewares/errorHandler';
 
 const app = express();
@@ -10,7 +10,9 @@ const app = express();
 // CORS configuration to allow Next.js frontend
 app.use(cors({
   origin: [
+    
     'http://localhost:3000',
+    'http://localhost:3001',
     'https://localhost:3000',
     'http://127.0.0.1:3000',
     'https://127.0.0.1:3000'

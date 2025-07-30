@@ -24,29 +24,57 @@ export async function getClerkUserId(req: Request): Promise<string | null> {
 
     // Option 1: Check for Authorization header with Bearer token
     const authHeader = req.headers.authorization;
+    console.log('🔍 Checking Authorization header:', authHeader);
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      
+
       try {
-        // For Next.js Clerk integration, verify the session token
-        const payload = await verifyToken(token, {
+        // Add timeout for token verification to prevent hanging
+        const verificationPromise = verifyToken(token, {
           secretKey: process.env.CLERK_SECRET_KEY!,
           jwtKey: process.env.CLERK_JWT_KEY,
+          // Add clock tolerance for JWT timing issues - increased for development
+          clockSkewInMs: 300000, // 5 minutes tolerance for development
         });
-        
+
+        // Set a timeout of 5 seconds for token verification
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Token verification timeout')),
+            5000,
+          ),
+        );
+
+        const payload = (await Promise.race([
+          verificationPromise,
+          timeoutPromise,
+        ])) as any;
+        console.log('Token payload:', payload);
+
         if (payload.sub) {
           return payload.sub;
         }
-      } catch (tokenError) {
+      } catch (tokenError: any) {
         console.warn('Token verification failed:', tokenError);
-        
-        // In development, allow mock tokens for testing
+
+        // In development, always use fallback for any token verification failure
         if (process.env.NODE_ENV === 'development') {
-          if (token.startsWith('dev_')) {
+          console.log('🔧 Development mode: Using fallback for token verification failure');
+          
+          // For any JWT timing issues in development, use fallback
+          if (tokenError.reason === 'token-not-active-yet' || 
+              tokenError.message?.includes('not before') ||
+              tokenError.message?.includes('JWT cannot be used prior')) {
+            console.log('🔧 JWT timing issue detected, using development fallback');
             return 'dev_user_123';
           }
-          // Handle Next.js development tokens
-          if (token.includes('test') || token.includes('dev')) {
+          
+          // For any other token issues in development, also use fallback
+          if (token.startsWith('dev_') || 
+              token.includes('test') || 
+              token.includes('dev') ||
+              tokenError.reason) {
+            console.log('🔧 Development token issue, using fallback user');
             return 'dev_user_123';
           }
         }
@@ -112,6 +140,8 @@ export async function getClerkUser(userId: string) {
  * Middleware to authenticate requests using Clerk
  */
 export async function clerkAuthMiddleware(req: Request, res: any, next: any) {
+  console.log(`🔍 Auth middleware called for ${req.method} ${req.path}`);
+
   try {
     // Check for bypass header for testing
     const bypassAuth = req.headers['x-dev-bypass-auth'];
@@ -121,37 +151,42 @@ export async function clerkAuthMiddleware(req: Request, res: any, next: any) {
       return next();
     }
 
+    console.log('🔍 Attempting to get Clerk user ID...');
     // Try to get user ID from Clerk
     const userId = await getClerkUserId(req);
-    
+    console.log(`🔍 Clerk user ID result: ${userId}`);
+
     if (!userId) {
       if (isDevelopment) {
         console.log('🔧 Development mode: Auth failed, using fallback user');
         (req as any).userId = 'dev_user_123';
         return next();
       }
-      
-      return res.status(401).json({ 
-        error: 'Unauthorized', 
-        message: 'Please provide valid authentication credentials' 
+
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Please provide valid authentication credentials',
       });
     }
 
     // Attach user ID to request for use in controllers
     (req as any).userId = userId;
+    console.log('✅ Authentication successful, calling next()');
     next();
   } catch (error) {
     console.error('Authentication error:', error);
-    
+
     if (isDevelopment) {
-      console.log('🔧 Development mode: Using fallback authentication due to error');
+      console.log(
+        '🔧 Development mode: Using fallback authentication due to error',
+      );
       (req as any).userId = 'dev_user_123';
       return next();
     }
-    
-    return res.status(401).json({ 
-      error: 'Authentication failed', 
-      message: 'Invalid authentication credentials' 
+
+    return res.status(401).json({
+      error: 'Authentication failed',
+      message: 'Invalid authentication credentials',
     });
   }
 }

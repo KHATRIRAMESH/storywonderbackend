@@ -30,7 +30,6 @@ export const stories = pgTable('stories', {
   interests: text('interests').array(),
   theme: text('theme').notNull(),
   setting: text('setting'),
-  style: text('style').default('cartoon'),
   companions: text('companions').array(),
   pageCount: integer('page_count').default(10).notNull(),
   childImageUrl: text('child_image_url'),
