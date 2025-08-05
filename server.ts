@@ -9,9 +9,7 @@ const PORT = config.port || 8000;
 
 async function startServer() {
   try {
-    // Test database connection
     const client = await pool.connect();
-    // console.log('📦 Database connection established');
     client.release();
 
     app.listen(PORT, () => {

@@ -8,7 +8,18 @@ import { userService } from '../services/userService';
 passport.use(
   new JwtStrategy(
     {
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ExtractJwt.fromExtractors([
+          (request) => {
+            let token = null;
+            if (request && request.cookies) {
+              token = request.cookies['auth_token'];
+            }
+            return token;
+          }
+        ])
+      ]),
       secretOrKey: process.env.JWT_SECRET!,
       passReqToCallback: false,
     },

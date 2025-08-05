@@ -2,8 +2,9 @@ import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/config';
-import { users, userSessions, oauthAccounts } from '../db/schema';
+import { users, userSessions, oauthAccounts, emailVerifications } from '../db/schema';
 import { generateJWT, verifyJWT } from '../middlewares/authMiddleware';
+import { emailService } from './emailService';
 
 export interface RegisterUserResult {
   user: {
@@ -11,6 +12,7 @@ export interface RegisterUserResult {
     email: string;
     firstName?: string;
     lastName?: string;
+    role?: string;
     subscriptionLevel: 'free' | 'premium' | 'pro';
   };
   token: string;
@@ -37,10 +39,10 @@ export class AuthService {
    * Register a new user with email and password
    */
   async registerUser(
-    email: string, 
-    password: string, 
-    firstName?: string, 
-    lastName?: string
+    email: string,
+    password: string,
+    firstName?: string,
+    lastName?: string,
   ): Promise<RegisterUserResult | null> {
     try {
       // Hash password
@@ -48,25 +50,33 @@ export class AuthService {
       const userId = uuidv4();
 
       // Create user in database
-      const [newUser] = await db.insert(users).values({
-        id: userId,
-        email: email.toLowerCase().trim(),
-        password: hashedPassword,
-        firstName: firstName?.trim(),
-        lastName: lastName?.trim(),
-        subscriptionLevel: 'free',
-        storiesGenerated: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }).returning();
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          id: userId,
+          email: email.toLowerCase().trim(),
+          password: hashedPassword,
+          firstName: firstName?.trim(),
+          lastName: lastName?.trim(),
+          role: 'user',
+          emailVerified: false,
+          subscriptionLevel: 'free',
+          storiesGenerated: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
 
       if (!newUser) {
         throw new Error('Failed to create user');
       }
 
+      // Send verification email
+      await this.sendVerificationEmail(newUser.id, newUser.email, newUser.firstName || undefined);
+
       // Create initial session
       const sessionResult = await this.createSessionForUser(newUser.id);
-      
+
       if (!sessionResult) {
         throw new Error('Failed to create session');
       }
@@ -77,6 +87,7 @@ export class AuthService {
           email: newUser.email,
           firstName: newUser.firstName || undefined,
           lastName: newUser.lastName || undefined,
+          role: newUser.role || undefined,
           subscriptionLevel: newUser.subscriptionLevel,
         },
         token: sessionResult.token,
@@ -87,10 +98,15 @@ export class AuthService {
     }
   }
 
+ 
+
   /**
    * Authenticate user with email and password
    */
-  async authenticateUser(email: string, password: string): Promise<AuthenticateUserResult | null> {
+  async authenticateUser(
+    email: string,
+    password: string,
+  ): Promise<AuthenticateUserResult | null> {
     try {
       // Find user by email
       const [user] = await db
@@ -105,14 +121,14 @@ export class AuthService {
 
       // Verify password
       const isValidPassword = await bcrypt.compare(password, user.password);
-      
+
       if (!isValidPassword) {
         return null;
       }
 
       // Create session
       const sessionResult = await this.createSessionForUser(user.id);
-      
+
       if (!sessionResult) {
         throw new Error('Failed to create session');
       }
@@ -181,7 +197,7 @@ export class AuthService {
     try {
       // Verify JWT
       const payload = verifyJWT(token);
-      
+
       if (!payload || !payload.sessionId || !payload.userId) {
         return null;
       }
@@ -193,8 +209,8 @@ export class AuthService {
         .where(
           and(
             eq(userSessions.id, payload.sessionId),
-            eq(userSessions.userId, payload.userId)
-          )
+            eq(userSessions.userId, payload.userId),
+          ),
         )
         .limit(1);
 
@@ -236,10 +252,8 @@ export class AuthService {
    */
   async invalidateSession(sessionId: string): Promise<boolean> {
     try {
-      await db
-        .delete(userSessions)
-        .where(eq(userSessions.id, sessionId));
-      
+      await db.delete(userSessions).where(eq(userSessions.id, sessionId));
+
       return true;
     } catch (error) {
       console.error('Error invalidating session:', error);
@@ -255,7 +269,7 @@ export class AuthService {
       await db
         .delete(userSessions)
         .where(eq(userSessions.expiresAt, new Date()));
-      
+
       console.log('Cleaned up expired sessions');
     } catch (error) {
       console.error('Error cleaning up expired sessions:', error);
@@ -269,7 +283,7 @@ export class AuthService {
     provider: 'google' | 'apple',
     providerId: string,
     email: string,
-    profile: any
+    profile: any,
   ): Promise<{ user: any; isNewUser: boolean } | null> {
     try {
       // Check if OAuth account exists
@@ -279,8 +293,8 @@ export class AuthService {
         .where(
           and(
             eq(oauthAccounts.provider, provider),
-            eq(oauthAccounts.providerAccountId, providerId)
-          )
+            eq(oauthAccounts.providerAccountId, providerId),
+          ),
         )
         .limit(1);
 
@@ -311,17 +325,20 @@ export class AuthService {
       } else {
         // Create new user
         const newUserId = uuidv4();
-        const [newUser] = await db.insert(users).values({
-          id: newUserId,
-          email: email.toLowerCase().trim(),
-          firstName: profile.given_name || profile.name?.givenName,
-          lastName: profile.family_name || profile.name?.familyName,
-          profileImageUrl: profile.picture,
-          subscriptionLevel: 'free',
-          storiesGenerated: 0,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }).returning();
+        const [newUser] = await db
+          .insert(users)
+          .values({
+            id: newUserId,
+            email: email.toLowerCase().trim(),
+            firstName: profile.given_name || profile.name?.givenName,
+            lastName: profile.family_name || profile.name?.familyName,
+            profileImageUrl: profile.picture,
+            subscriptionLevel: 'free',
+            storiesGenerated: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
 
         if (!newUser) {
           throw new Error('Failed to create user');
@@ -360,7 +377,10 @@ export class AuthService {
   /**
    * Refresh an OAuth token
    */
-  async refreshOAuthToken(provider: 'google' | 'apple', userId: string): Promise<boolean> {
+  async refreshOAuthToken(
+    provider: 'google' | 'apple',
+    userId: string,
+  ): Promise<boolean> {
     try {
       // This would implement OAuth token refresh logic
       // For now, we'll return true as a placeholder
@@ -369,6 +389,205 @@ export class AuthService {
     } catch (error) {
       console.error('Error refreshing OAuth token:', error);
       return false;
+    }
+  }
+
+  /**
+   * Send verification email to user
+   */
+  async sendVerificationEmail(
+    userId: string,
+    email: string,
+    firstName?: string
+  ): Promise<boolean> {
+    try {
+      // Generate 6-digit verification code
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const verificationId = uuidv4();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+      // Delete any existing verification codes for this user
+      await db.delete(emailVerifications).where(eq(emailVerifications.userId, userId));
+
+      // Create new verification record
+      await db.insert(emailVerifications).values({
+        id: verificationId,
+        userId,
+        email,
+        verificationCode,
+        expiresAt,
+        verified: false,
+        createdAt: new Date(),
+      });
+
+      // Create verification URL
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const verificationUrl = `${frontendUrl}/auth/verify-email?code=${verificationCode}&userId=${userId}`;
+
+      // Send email
+      const emailSent = await emailService.sendVerificationEmail({
+        email,
+        firstName,
+        verificationCode,
+        verificationUrl,
+      });
+
+      if (emailSent) {
+        console.log(`✅ Verification email sent to ${email}`);
+        return true;
+      } else {
+        console.error(`❌ Failed to send verification email to ${email}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error sending verification email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Verify email using verification code
+   */
+  async verifyEmail(
+    email: string,
+    verificationCode: string
+  ): Promise<{ success: boolean; message: string } | null> {
+    try {
+      // Find verification record
+      const [verification] = await db
+        .select()
+        .from(emailVerifications)
+        .where(
+          and(
+            eq(emailVerifications.email, email),
+            eq(emailVerifications.verificationCode, verificationCode),
+            eq(emailVerifications.verified, false)
+          )
+        )
+        .limit(1);
+
+      if (!verification) {
+        return {
+          success: false,
+          message: 'Invalid verification code or email'
+        };
+      }
+
+      // Check if code has expired
+      if (verification.expiresAt < new Date()) {
+        return {
+          success: false,
+          message: 'Verification code has expired'
+        };
+      }
+
+      // Mark verification as verified
+      await db
+        .update(emailVerifications)
+        .set({ verified: true })
+        .where(eq(emailVerifications.id, verification.id));
+
+      // Mark user email as verified
+      await db
+        .update(users)
+        .set({ 
+          emailVerified: true,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, verification.userId));
+
+      // Get user info for welcome email
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, verification.userId))
+        .limit(1);
+
+      // Send welcome email
+      if (user) {
+        await emailService.sendWelcomeEmail(user.email, user.firstName || undefined);
+      }
+
+      console.log(`✅ Email verified successfully for user: ${verification.userId}`);
+      
+      return {
+        success: true,
+        message: 'Email verified successfully'
+      };
+    } catch (error) {
+      console.error('Error verifying email:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Resend verification email
+   */
+  async resendVerificationEmail(email: string): Promise<boolean> {
+    try {
+      // Find user by email
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email.toLowerCase().trim()))
+        .limit(1);
+
+      if (!user) {
+        console.error('User not found for email:', email);
+        return false;
+      }
+
+      if (user.emailVerified) {
+        console.log('Email already verified for user:', user.id);
+        return true; // Already verified, no need to resend
+      }
+
+      // Send new verification email
+      return await this.sendVerificationEmail(user.id, user.email, user.firstName || undefined);
+    } catch (error) {
+      console.error('Error resending verification email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get verification status for user
+   */
+  async getVerificationStatus(userId: string): Promise<{
+    emailVerified: boolean;
+    hasUnverifiedCode: boolean;
+  } | null> {
+    try {
+      // Get user verification status
+      const [user] = await db
+        .select({ emailVerified: users.emailVerified })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        return null;
+      }
+
+      // Check for unverified codes
+      const [pendingVerification] = await db
+        .select()
+        .from(emailVerifications)
+        .where(
+          and(
+            eq(emailVerifications.userId, userId),
+            eq(emailVerifications.verified, false)
+          )
+        )
+        .limit(1);
+
+      return {
+        emailVerified: user.emailVerified || false,
+        hasUnverifiedCode: !!pendingVerification,
+      };
+    } catch (error) {
+      console.error('Error getting verification status:', error);
+      return null;
     }
   }
 }

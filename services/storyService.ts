@@ -1,9 +1,4 @@
-import {
-  Story,
-  StoryPage,
-  CreateStoryRequest,
-  StoryWithPages,
-} from '../models/schemas';
+import { Story, StoryPage, CreateStoryRequest } from '../models/schemas';
 import fs from 'fs';
 import { userService } from './userService';
 import { eq, desc, asc, and } from 'drizzle-orm';

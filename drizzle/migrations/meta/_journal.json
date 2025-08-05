@@ -15,6 +15,34 @@
       "when": 1754278482470,
       "tag": "0001_large_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1754371367552,
+      "tag": "0002_absent_mesmero",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1754382832558,
+      "tag": "0003_flimsy_baron_strucker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1754383300716,
+      "tag": "0004_jazzy_venom",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1754389712210,
+      "tag": "0005_square_grim_reaper",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import session from 'express-session';
+import cookieParser from 'cookie-parser';
 import passport from './config/passport';
 import authRoutes from './routes/auth.route';
 import storyRoutes from './routes/story.route';
@@ -12,14 +13,7 @@ const app = express();
 // CORS configuration to allow Next.js frontend
 app.use(
   cors({
-    origin: [
-      'https://storywonder.vercel.app',
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'https://localhost:3000',
-      'http://127.0.0.1:3000',
-      'https://127.0.0.1:3000',
-    ],
+    origin: ['https://storywonder.vercel.app', 'http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: [
@@ -35,6 +29,7 @@ app.use(
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Session middleware for OAuth flows
 app.use(
@@ -43,10 +38,13 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
+      httpOnly: true,
+      sameSite: 'lax', // Adjust based on your needs
+
       secure: process.env.NODE_ENV === 'production',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
-  })
+  }),
 );
 
 // Initialize Passport

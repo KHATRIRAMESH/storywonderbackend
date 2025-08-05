@@ -136,5 +136,3 @@ export class OpenAIService {
 }
 
 export const openaiService = new OpenAIService();
-
-import pool from '../config/database';
