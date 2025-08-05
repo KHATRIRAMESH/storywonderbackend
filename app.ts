@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
+import session from 'express-session';
+import passport from './config/passport';
 import authRoutes from './routes/auth.route';
 import storyRoutes from './routes/story.route';
 import { errorHandler } from './middlewares/errorHandler';
@@ -33,6 +35,23 @@ app.use(
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Session middleware for OAuth flows
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'your-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  })
+);
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));

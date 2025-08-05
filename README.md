@@ -107,14 +107,11 @@ The server includes mock authentication for development. It accepts:
 ### Production Mode (Clerk Integration)
 To enable Clerk authentication:
 
-1. **Install Clerk backend package:**
-   ```bash
-   npm install @clerk/backend
-   ```
+1. **Configure environment variables** for authentication (JWT, OAuth)
 
-2. **Update clerkAuth.ts** to use actual Clerk client instead of mock implementation
+2. **Set up database migrations** using Drizzle
 
-3. **Configure Clerk middleware** in your routes
+3. **Configure authentication providers** (Google, Apple OAuth)
 
 ## Project Structure
 
@@ -132,7 +129,8 @@ To enable Clerk authentication:
 │   └── storyRoutes.route.ts  # Story API routes
 ├── middlewares/
 │   └── errorHandler.ts    # Global error handling
-├── clerkAuth.ts           # Authentication utilities
+├── utils/
+│   └── auth.ts            # JWT authentication utilities
 └── public/
     └── uploads/           # File uploads directory
 ```

@@ -3,7 +3,8 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import { createTables, dropTables } from '../database/migrations';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { db } from '../db/config';
 
 async function runMigrations() {
   const command = process.argv[2];
@@ -12,36 +13,37 @@ async function runMigrations() {
     switch (command) {
       case 'up':
         console.log('🔄 Running database migrations...');
-        await createTables();
+        await migrate(db, { migrationsFolder: './drizzle/migrations' });
         console.log('✅ Database migrations completed successfully');
         break;
         
-      case 'down':
-        console.log('🗑️  Rolling back database migrations...');
-        await dropTables();
-        console.log('✅ Database rollback completed successfully');
+      case 'generate':
+        console.log('� Generating migration files...');
+        console.log('Please run: npm run db:generate');
         break;
         
-      case 'reset':
-        console.log('🔄 Resetting database...');
-        await dropTables();
-        await createTables();
-        console.log('✅ Database reset completed successfully');
+      case 'push':
+        console.log('� Pushing schema changes to database...');
+        console.log('Please run: npm run db:push');
         break;
         
       default:
-        console.log('Usage: npm run migrate [up|down|reset]');
-        console.log('  up    - Create tables');
-        console.log('  down  - Drop tables');
-        console.log('  reset - Drop and recreate tables');
+        console.log(`
+Usage: npm run migrate [command]
+
+Commands:
+  up        Run pending migrations
+  generate  Generate migration files (use: npm run db:generate)
+  push      Push schema changes to database (use: npm run db:push)
+        `);
         process.exit(1);
     }
+
+    process.exit(0);
   } catch (error) {
     console.error('❌ Migration failed:', error);
     process.exit(1);
   }
-  
-  process.exit(0);
 }
 
 runMigrations();
